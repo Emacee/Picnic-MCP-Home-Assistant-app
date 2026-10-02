@@ -1,0 +1,9 @@
+node_modules/
+*.log
+.DS_Store
+.env
+# Runtime state belongs in the add-on's /data, never here.
+picnic-session*.json
+picnic-device*.json
+oauth-store*.json
+options.json

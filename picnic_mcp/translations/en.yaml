@@ -1,0 +1,61 @@
+configuration:
+  picnic_email:
+    name: Picnic e-mail
+    description: The e-mail address you log in to the Picnic app with.
+  picnic_password:
+    name: Picnic password
+    description: >-
+      Stored only in this add-on's options on your own Home Assistant. If
+      your account uses two-factor authentication, finish the login from the
+      add-on's web UI after starting it.
+  country_code:
+    name: Country
+    description: The country of your Picnic account (NL, DE or FR).
+  mcp_url:
+    name: MCP client URL
+    description: >-
+      The public URL clients use, e.g. https://mcp.example.com/picnic/mcp.
+      Used as the OAuth issuer, so set it when you expose the add-on through
+      a tunnel. Never append the token to it. Leave blank for local-only use.
+  mcp_auth_token:
+    name: Bearer token
+    description: >-
+      Shared secret for clients that send "Authorization: Bearer <token>",
+      and the password on the OAuth approval page for Claude web and mobile.
+      Leave blank and one is generated and saved here on first start.
+  path_prefix:
+    name: Path prefix
+    description: >-
+      Everything this add-on serves lives under this path (default /picnic,
+      so MCP is at /picnic/mcp). That is what lets several MCP add-ons share
+      one hostname. Use / to serve at the root of a dedicated hostname.
+  forward_other_paths_to:
+    name: Forward other paths to
+    description: >-
+      Optional. Requests outside the path prefix are forwarded here, e.g.
+      http://<repo-id>-dutch-open-data-mcp:8098 for the Dutch Open Data MCP
+      add-on. Point your tunnel hostname at this add-on and both MCP servers
+      share it. Leave blank to answer 404 instead.
+  allow_cart_changes:
+    name: Allow cart changes
+    description: >-
+      Lets the assistant add and remove products and recipes in your cart
+      and save recipes. Nothing is ordered until you check out in the app.
+  allow_delivery_changes:
+    name: Allow delivery changes
+    description: >-
+      Lets the assistant pick a delivery slot, cancel or rate a delivery and
+      e-mail invoices. Off by default.
+  allow_account_details:
+    name: Allow account details
+    description: >-
+      Lets the assistant read your profile, payment profile and wallet
+      transactions. Off by default.
+  expose_2fa_tools:
+    name: Expose 2FA tools
+    description: >-
+      Lets the assistant request and enter 2FA codes itself. Normally you do
+      this in the add-on's web UI instead. Off by default.
+  log_level:
+    name: Log level
+    description: debug, info, warning or error.

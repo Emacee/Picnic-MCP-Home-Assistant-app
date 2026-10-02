@@ -1,0 +1,73 @@
+name: "Picnic MCP"
+version: "0.1.0"
+slug: "picnic_mcp"
+description: >-
+  Let AI assistants such as Claude use your Picnic grocery account — search
+  products and recipes, fill the cart, check deliveries — through an MCP
+  server running in your own Home Assistant. Bearer-token and OAuth access
+  for every Claude app, 2FA from the add-on's web UI, and opt-in tool groups
+  for anything that changes orders or reads account details. Serves under
+  /picnic and can forward other paths to another MCP add-on, so several can
+  share one Cloudflare Tunnel hostname.
+url: "https://github.com/Emacee/Picnic-MCP-Home-Assistant-app"
+arch:
+  - aarch64
+  - amd64
+init: false
+# The web UI (status, 2FA, OAuth clients) runs on its own ingress-only port,
+# deliberately NOT listed under `ports`: it is reachable only through Home
+# Assistant's authenticated ingress proxy, never from the LAN or the tunnel,
+# and the app additionally rejects connections not from the Supervisor proxy.
+ingress: true
+ingress_port: 8096
+panel_icon: mdi:cart-outline
+panel_title: Picnic MCP
+panel_admin: true
+ports:
+  8097/tcp: 8097
+ports_description:
+  8097/tcp: >-
+    MCP Streamable HTTP under the path prefix (default /picnic/mcp), its
+    OAuth endpoints, and — if forward_other_paths_to is set — every other
+    path, forwarded. Point your tunnel hostname here; see DOCS.md.
+watchdog: "tcp://[HOST]:[PORT:8097]"
+startup: application
+boot: auto
+# hassio_api: run.sh writes the generated bearer token back into this
+# add-on's own options (POST /addons/self/options). Nothing else is used.
+hassio_api: true
+homeassistant_api: false
+options:
+  picnic_email: ""
+  picnic_password: ""
+  country_code: "NL"
+  # Public URL clients use, e.g. https://mcp.example.com/picnic/mcp. Used as
+  # the OAuth issuer instead of trusting the request's Host header. Leave
+  # blank for local-only use.
+  mcp_url: ""
+  # Left blank on purpose: no secret belongs in this repository. run.sh
+  # generates one on first start and saves it back here.
+  mcp_auth_token: ""
+  path_prefix: "/picnic"
+  forward_other_paths_to: ""
+  allow_cart_changes: true
+  allow_delivery_changes: false
+  allow_account_details: false
+  expose_2fa_tools: false
+  log_level: "info"
+schema:
+  # str rather than email/url: the Home Assistant Companion app's config
+  # form mishandles those types (it shifted a url value into a different
+  # field in the Dutch Open Data MCP add-on).
+  picnic_email: str?
+  picnic_password: password?
+  country_code: list(NL|DE|FR)
+  mcp_url: str?
+  mcp_auth_token: password?
+  path_prefix: str?
+  forward_other_paths_to: str?
+  allow_cart_changes: bool
+  allow_delivery_changes: bool
+  allow_account_details: bool
+  expose_2fa_tools: bool
+  log_level: list(debug|info|warning|error)

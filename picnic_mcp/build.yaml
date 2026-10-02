@@ -1,0 +1,7 @@
+# Alpine 3.22 ships Node 22. Upstream's bundle targets Node 18+, so any
+# recent base works; this matches the Dutch Open Data MCP add-on.
+build_from:
+  aarch64: ghcr.io/home-assistant/aarch64-base:3.22
+  amd64: ghcr.io/home-assistant/amd64-base:3.22
+labels:
+  io.hass.type: addon
