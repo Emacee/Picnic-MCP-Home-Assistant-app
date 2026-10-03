@@ -9,10 +9,11 @@
 // token can approve a new client, which then gets its own opaque
 // access/refresh tokens instead of the shared secret itself.
 //
-// The difference from a root-mounted server is the base path. This add-on
-// lives under a prefix (default /picnic) so it can share one public hostname
-// with other MCP servers. Its issuer is therefore https://host/picnic, and
-// RFC 8414 / RFC 9728 put the metadata for such an issuer at
+// By default the add-on is served at the root of its own hostname, and then
+// this is an ordinary root-mounted server. It can also live under a prefix
+// (e.g. /picnic) to share one public hostname with other MCP servers. Its
+// issuer is then https://host/picnic, and RFC 8414 / RFC 9728 put the
+// metadata for such an issuer at
 // /.well-known/<kind>/picnic — a path at the ROOT of the host, not under the
 // prefix. Both forms are served here, plus the OIDC-style
 // /picnic/.well-known/... that some clients try as a fallback, and the

@@ -34,9 +34,8 @@ EXPOSE_2FA_TOOLS="$(bashio::config 'expose_2fa_tools')"
 for var in PICNIC_USERNAME PICNIC_PASSWORD MCP_URL PATH_PREFIX FORWARD_TO; do
   if [ "${!var}" = "null" ]; then printf -v "$var" '%s' ""; fi
 done
-# An option left out entirely means the default prefix, not "no prefix";
-# "/" is how to ask for the host root explicitly.
-if ! bashio::config.has_value 'path_prefix'; then PATH_PREFIX="/picnic"; fi
+# Blank or left out: serve at the root of the hostname (the default).
+if ! bashio::config.has_value 'path_prefix'; then PATH_PREFIX="/"; fi
 
 # Bearer token: no secret ships in config.yaml or this repo. If the
 # Configuration field is blank, generate one and write it back into this

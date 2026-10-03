@@ -18,9 +18,10 @@
 //
 //   1. Bearer-token auth, plus a small OAuth 2.1 server (oauth.mjs) for
 //      clients without a header field (Claude web and mobile).
-//   2. Everything served under a path prefix (default /picnic), and
-//      everything else optionally forwarded to another service (forward.mjs),
-//      so one public hostname can carry several MCP add-ons.
+//   2. Served at the root of its own hostname by default
+//      (https://picnic.example.com/mcp). Optionally under a path prefix with
+//      everything else forwarded to another service (forward.mjs), so one
+//      public hostname can carry several MCP add-ons.
 //   3. Tool groups the operator switches on explicitly; tools this add-on
 //      doesn't know (added by a future upstream pin) are withheld until
 //      someone reviews them.
@@ -79,12 +80,12 @@ function normalisePrefix(raw) {
   const trimmed = String(raw ?? "").trim().replace(/^\/+|\/+$/g, "");
   if (!trimmed) return "";
   if (!/^[A-Za-z0-9._~-]+(\/[A-Za-z0-9._~-]+)*$/.test(trimmed)) {
-    log("error", "path_prefix may only contain letters, digits and . _ ~ - (and / between segments); falling back to /picnic", { path_prefix: raw });
-    return "/picnic";
+    log("error", "path_prefix may only contain letters, digits and . _ ~ - (and / between segments); serving at the root instead", { path_prefix: raw });
+    return "";
   }
   return `/${trimmed}`;
 }
-const PREFIX = normalisePrefix(process.env.PATH_PREFIX ?? "/picnic");
+const PREFIX = normalisePrefix(process.env.PATH_PREFIX ?? "/");
 
 // The public origin OAuth discovery advertises, from the operator's mcp_url
 // rather than from the request, whose forwarded Host the caller controls.
@@ -108,7 +109,7 @@ let forwardConfigError = "";
 try {
   FORWARD_TARGET = parseForwardTarget(process.env.FORWARD_TO);
   if (FORWARD_TARGET && !PREFIX) {
-    forwardConfigError = "forwarding needs a path_prefix: with an empty prefix this add-on owns every path, so nothing would be left to forward";
+    forwardConfigError = "forwarding needs a path_prefix such as /picnic: at the root this add-on owns every path, so nothing would be left to forward";
     FORWARD_TARGET = null;
   }
 } catch (err) {

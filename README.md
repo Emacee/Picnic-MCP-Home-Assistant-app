@@ -11,9 +11,8 @@ deliveries. You still check out in the Picnic app yourself.
 > **Powered by [mcp-picnic](https://github.com/ivo-toby/mcp-picnic) by Ivo
 > Toby.** The Picnic tools — the hard part — are theirs. This add-on packages
 > them for Home Assistant and adds authentication, OAuth for the Claude apps,
-> a 2FA flow, tool permissions and path-based sharing of one hostname. It is
-> an independent project, **not affiliated with or endorsed by the mcp-picnic
-> authors or Picnic**.
+> a 2FA flow and tool permissions. It is an independent project, **not
+> affiliated with or endorsed by the mcp-picnic authors or Picnic**.
 
 ## What this add-on adds
 
@@ -21,11 +20,6 @@ deliveries. You still check out in the Picnic app yourself.
   start, plus an OAuth 2.1 layer (dynamic client registration + PKCE) so
   Claude on the web, desktop, iOS and Android can connect with no header
   field.
-- **One hostname for several MCP servers.** Everything is served under
-  `/picnic`, and every other path can be forwarded to another add-on — such
-  as [Dutch Open Data MCP](https://github.com/Emacee/Dutch-Open-Data-MCP---Home-Assistant-App).
-  Point a single Cloudflare Tunnel hostname at this add-on and both servers
-  are reachable through it.
 - **Permissions.** Browsing products, recipes, the cart and deliveries is
   always available. Changing the cart is on by default; changing deliveries
   and reading account or payment details are off until you turn them on.
@@ -46,28 +40,33 @@ deliveries. You still check out in the Picnic app yourself.
    on the **Configuration** tab, and start it.
 3. Open the add-on's web UI. If your account uses 2FA, request a code there
    and enter it.
-4. Read the **Documentation** tab for connecting Claude and for exposing the
-   add-on through a tunnel.
 
 Requires a 64-bit Home Assistant OS or Supervised install (`amd64` or `aarch64`).
 
-## Sharing one hostname with Dutch Open Data MCP
+## Reaching it from your devices
+
+On your own network the MCP endpoint is `http://<HA host>:8097/mcp`.
+
+To use it from your phone or claude.ai, give it **its own subdomain** through
+a [Cloudflare Tunnel](https://github.com/homeassistant-apps/app-cloudflared)
+(or any reverse proxy):
 
 ```
-https://mcp.example.com/picnic/mcp  ──►  Picnic MCP (this add-on, :8097)
-https://mcp.example.com/mcp         ──►  forwarded to Dutch Open Data MCP (:8098)
+https://picnic.example.com/mcp  ──►  http://<HA host>:8097/mcp
 ```
 
-1. In this add-on, set `forward_other_paths_to` to the other add-on, e.g.
-   `http://<repo-id>-dutch-open-data-mcp:8098` (the Documentation explains
-   where to find that name).
-2. Point your tunnel's hostname at this add-on (`http://<this add-on>:8097`)
-   instead of at the other one.
-3. Set `mcp_url` in each add-on to its own URL on the shared hostname.
+1. Add a public hostname `picnic.example.com` to your tunnel with service
+   `http://<HA host>:8097`. Cloudflare creates the DNS record.
+2. Set `mcp_url` in this add-on to `https://picnic.example.com/mcp` and
+   restart it.
+3. In Claude: **Settings → Connectors → Add custom connector** →
+   `https://picnic.example.com/mcp`, and paste the add-on's token on the page
+   that opens. The connector then works in the Claude apps on all your
+   devices.
 
-Each server keeps its own token and its own OAuth clients. The full
-walkthrough, including a Cloudflare-only alternative, is in the
-Documentation tab.
+The Documentation tab has the details, plus an advanced setup for sharing one
+hostname with another MCP add-on such as
+[Dutch Open Data MCP](https://github.com/Emacee/Dutch-Open-Data-MCP---Home-Assistant-App).
 
 ## Security, briefly
 
@@ -90,4 +89,4 @@ this repository or sent anywhere but Picnic.
 
 Bugs in the Picnic tools belong
 [upstream](https://github.com/ivo-toby/mcp-picnic/issues); bugs in
-packaging, auth, forwarding or the web UI belong here.
+packaging, auth or the web UI belong here.

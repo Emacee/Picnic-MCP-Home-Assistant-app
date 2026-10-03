@@ -1,14 +1,14 @@
 name: "Picnic MCP"
-version: "0.1.0"
+version: "0.2.0"
 slug: "picnic_mcp"
 description: >-
   Let AI assistants such as Claude use your Picnic grocery account — search
   products and recipes, fill the cart, check deliveries — through an MCP
   server running in your own Home Assistant. Bearer-token and OAuth access
   for every Claude app, 2FA from the add-on's web UI, and opt-in tool groups
-  for anything that changes orders or reads account details. Serves under
-  /picnic and can forward other paths to another MCP add-on, so several can
-  share one Cloudflare Tunnel hostname.
+  for anything that changes orders or reads account details. Give it its own
+  hostname (https://picnic.example.com/mcp) through a Cloudflare Tunnel or any
+  reverse proxy.
 url: "https://github.com/Emacee/Picnic-MCP-Home-Assistant-app"
 arch:
   - aarch64
@@ -27,9 +27,8 @@ ports:
   8097/tcp: 8097
 ports_description:
   8097/tcp: >-
-    MCP Streamable HTTP under the path prefix (default /picnic/mcp), its
-    OAuth endpoints, and — if forward_other_paths_to is set — every other
-    path, forwarded. Point your tunnel hostname here; see DOCS.md.
+    MCP Streamable HTTP at /mcp and its OAuth endpoints. Point a dedicated
+    tunnel hostname (e.g. picnic.example.com) here; see DOCS.md.
 watchdog: "tcp://[HOST]:[PORT:8097]"
 startup: application
 boot: auto
@@ -41,14 +40,16 @@ options:
   picnic_email: ""
   picnic_password: ""
   country_code: "NL"
-  # Public URL clients use, e.g. https://mcp.example.com/picnic/mcp. Used as
+  # Public URL clients use, e.g. https://picnic.example.com/mcp. Used as
   # the OAuth issuer instead of trusting the request's Host header. Leave
   # blank for local-only use.
   mcp_url: ""
   # Left blank on purpose: no secret belongs in this repository. run.sh
   # generates one on first start and saves it back here.
   mcp_auth_token: ""
-  path_prefix: "/picnic"
+  # "/" serves at the root of the hostname (https://picnic.example.com/mcp).
+  # Only set a prefix such as /picnic to share a hostname; see DOCS.md.
+  path_prefix: "/"
   forward_other_paths_to: ""
   allow_cart_changes: true
   allow_delivery_changes: false

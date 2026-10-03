@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.0
+
+- **The add-on now serves at the root of its own hostname by default**:
+  `path_prefix` defaults to `/`, so the endpoint is
+  `https://picnic.example.com/mcp` (and `http://<HA host>:8097/mcp`
+  locally). A dedicated subdomain is now the documented setup.
+- Sharing one hostname with another MCP add-on still works: set
+  `path_prefix: /picnic` and `forward_other_paths_to`. The docs describe it
+  as an advanced setup.
+- If you installed 0.1.0 and kept its default, `path_prefix` stays
+  `/picnic` until you change it to `/` in Configuration.
+
 ## 0.1.0
 
 First release.
