@@ -1,5 +1,7 @@
 # Picnic MCP — Home Assistant add-on
 
+<p align="center"><img src="picnic_mcp/logo.png" alt="Picnic delivery van" width="200"></p>
+
 Let AI assistants use your **[Picnic](https://picnic.app)** grocery account
 from your own Home Assistant, over the
 [Model Context Protocol](https://modelcontextprotocol.io). Ask Claude

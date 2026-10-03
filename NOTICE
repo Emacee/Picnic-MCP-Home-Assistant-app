@@ -8,6 +8,12 @@ with, endorsed by, or supported by the mcp-picnic authors or by Picnic
 Technologies B.V. "Picnic" is a trademark of its owner and is used here only
 to say which service the add-on talks to.
 
+The add-on's icon and logo (picnic_mcp/icon.png, picnic_mcp/logo.png) are
+derived from Picnic's own illustration and logo, which remain the property
+of Picnic Technologies B.V. They are used only to identify the service this
+add-on connects to, not to suggest endorsement, and will be replaced on
+request of the rights holder.
+
 The licence of the packaged work follows, as it requires. The built image
 also ships it as /app/LICENSE.mcp-picnic.
 
