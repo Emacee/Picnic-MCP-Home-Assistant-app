@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Picnic MCP mascot: a walking grocery bag with an AI speech bubble.
+       Original artwork in a flat, Picnic-inspired illustration style. -->
+  <defs>
+    <clipPath id="bag"><path d="M150 232 L362 232 L378 388 Q379 398 368 398 L144 398 Q133 398 134 388 Z"/></clipPath>
+  </defs>
+  <circle cx="256" cy="256" r="248" fill="#F3EFE7"/>
+  <ellipse cx="256" cy="452" rx="118" ry="11" fill="#E4DCCB"/>
+
+  <!-- legs -->
+  <g fill="none" stroke="#2A2D3E" stroke-width="17" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M214 392 L208 438 L182 444"/>
+    <path d="M296 392 L304 436 L330 440"/>
+  </g>
+
+  <!-- produce sticking out of the bag (drawn first, the bag covers the bottoms) -->
+  <!-- leek -->
+  <path d="M318 250 C322 190 330 140 352 96 C356 120 350 170 342 252 Z" fill="#4E7A3A"/>
+  <path d="M306 252 C300 196 296 150 304 104 C318 130 324 190 326 252 Z" fill="#7FA545"/>
+  <!-- baguette -->
+  <g transform="rotate(-18 186 200)">
+    <rect x="164" y="104" width="44" height="160" rx="22" fill="#E6B15A"/>
+    <g stroke="#C78A33" stroke-width="6" stroke-linecap="round">
+      <path d="M174 138 L198 126"/><path d="M174 170 L198 158"/><path d="M174 202 L198 190"/>
+    </g>
+  </g>
+  <!-- carrot top + carrot -->
+  <g transform="rotate(10 266 200)">
+    <path d="M258 152 C244 120 230 106 212 100 C232 122 240 140 248 160 Z" fill="#4E7A3A"/>
+    <path d="M266 150 C264 116 270 96 286 80 C284 108 280 132 276 156 Z" fill="#7FA545"/>
+    <path d="M272 154 C284 128 298 118 316 116 C302 132 292 146 282 162 Z" fill="#4E7A3A"/>
+    <path d="M238 156 Q266 146 294 156 L270 262 Q266 268 262 262 Z" fill="#E8823A"/>
+    <g stroke="#C9672A" stroke-width="5" stroke-linecap="round">
+      <path d="M248 180 L262 182"/><path d="M276 200 L286 198"/><path d="M256 216 L266 218"/>
+    </g>
+  </g>
+  <!-- orange and lemon -->
+  <circle cx="222" cy="226" r="34" fill="#E3863C"/>
+  <path d="M214 194 C222 184 236 184 244 190 C234 194 224 196 214 194 Z" fill="#4E7A3A"/>
+  <circle cx="290" cy="232" r="32" fill="#EBC24E"/>
+  <!-- lettuce -->
+  <path d="M138 250 C130 214 160 200 176 214 C186 196 214 200 214 226 L214 250 Z" fill="#8AAE4C"/>
+
+  <!-- arms (behind the bag edge) -->
+  <g fill="none" stroke="#2A2D3E" stroke-width="15" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M150 296 C110 290 96 246 112 208"/>
+    <path d="M364 292 C394 296 414 312 408 330 C404 342 390 348 372 350"/>
+  </g>
+  <!-- waving hand -->
+  <g fill="none" stroke="#2A2D3E" stroke-width="9" stroke-linecap="round">
+    <path d="M112 208 L104 186"/><path d="M112 208 L118 184"/><path d="M112 208 L128 192"/><path d="M112 208 L94 198"/>
+  </g>
+
+  <!-- wave lines -->
+  <g fill="none" stroke="#2A2D3E" stroke-width="6" stroke-linecap="round">
+    <path d="M78 176 Q70 190 76 206"/><path d="M134 158 Q148 162 154 176"/>
+  </g>
+
+  <!-- the bag -->
+  <path d="M150 232 L362 232 L378 388 Q379 398 368 398 L144 398 Q133 398 134 388 Z" fill="#D63A2F"/>
+  <g clip-path="url(#bag)">
+    <path d="M330 232 L380 232 L380 400 L346 400 Z" fill="#B42E25"/>
+    <rect x="120" y="232" width="280" height="22" fill="#E4574B"/>
+    <path d="M120 262 L400 262" stroke="#B42E25" stroke-width="4"/>
+  </g>
+
+  <!-- AI speech-bubble badge -->
+  <circle cx="250" cy="326" r="40" fill="#F7F1E1"/>
+  <path d="M226 306 H274 Q284 306 284 316 V336 Q284 346 274 346 H246 L232 358 L234 346 H226 Q216 346 216 336 V316 Q216 306 226 306 Z" fill="#2A2D3E"/>
+  <circle cx="236" cy="326" r="5" fill="#F7F1E1"/>
+  <circle cx="250" cy="326" r="5" fill="#F7F1E1"/>
+  <circle cx="264" cy="326" r="5" fill="#F7F1E1"/>
+</svg>
