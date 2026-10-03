@@ -23,8 +23,9 @@ machine.
    generates a random bearer token and saves it into `mcp_auth_token`.
 2. **Web UI** (sidebar entry *Picnic MCP*, or **Open Web UI**): the status
    should read *ingelogd*. If it reads *wacht op 2FA-code*, press **Stuur
-   code per sms**, enter the code and press **Verifiëren**. The session is
-   stored, so this is a one-time step until Picnic revokes it.
+   code per sms**, enter the code and press **Verifiëren** — see
+   *Two-factor authentication* below. The session is stored, so this is a
+   one-time step until Picnic revokes it.
 3. **Give it its own subdomain**, e.g. `picnic.example.com`, through your
    Cloudflare Tunnel — see *Exposing it to the internet*. Set `mcp_url` to
    `https://picnic.example.com/mcp`. (On your own network only?
@@ -78,6 +79,72 @@ It runs on a separate, unpublished port (`8096`) and rejects every
 connection that doesn't come from the Supervisor's ingress proxy, so it is
 not reachable from your LAN, the tunnel or other add-ons.
 
+## Two-factor authentication (2FA)
+
+Picnic can ask for a second factor — a code sent by SMS — when a new device
+logs in. To Picnic, this add-on is a new device. You complete that step
+once, in the add-on's web UI; your assistant never needs to know about it.
+
+### How it goes
+
+1. **Start the add-on** with your e-mail and password filled in. It logs in
+   to Picnic with them.
+   - No 2FA on your account: the status becomes **ingelogd** and you're done.
+   - 2FA required: Picnic accepts the password but holds back access. The
+     status becomes **wacht op 2FA-code** and a *Tweestapsverificatie*
+     section appears.
+2. **Press _Stuur code per sms_.** Picnic sends a code to the phone number on
+   your account. The button can be used once a minute.
+3. **Enter the code and press _Verifiëren_.** The add-on hands it to Picnic,
+   receives a full session in return, checks it works, and the status
+   becomes **ingelogd**.
+
+### What is stored, and when you'll see it again
+
+- The session from step 3 is saved in `/data/picnic-session.json`
+  (readable only by the add-on), together with a random device id in
+  `/data/picnic-device.json`. Restarts and add-on updates reuse both, so
+  Picnic keeps recognising the same device and doesn't ask again.
+- You only go through 2FA again when:
+  - Picnic ends the session (Picnic decides when);
+  - you press **Opnieuw inloggen** in the web UI, which deliberately throws
+    the session away;
+  - you change `picnic_email` or `country_code` — the old session belonged
+    to the other account, so it's discarded automatically.
+- If Picnic ends the session while the add-on runs, tool calls start
+  failing with Picnic's own error. Press **Opnieuw inloggen**; with 2FA on
+  your account the status then goes back to *wacht op 2FA-code* and you
+  repeat steps 2–3.
+
+### While the login isn't finished
+
+The MCP endpoint stays up and Claude still sees the tools, but every tool
+call answers with a short explanation ("Picnic is not available right now…
+open the Picnic MCP add-on's web UI to finish the login") instead of trying
+to log in itself. That is deliberate: it means a wrong password or a pending
+2FA step never turns into a stream of failed logins against your Picnic
+account.
+
+### Letting the assistant do it (optional)
+
+With `expose_2fa_tools` on, two extra tools let the assistant request and
+enter the code itself — you'd tell Claude the code from the SMS. They only
+work while the add-on is actually waiting for a code. This is off by
+default, because the web UI route keeps the code out of your chat history
+and works without a connected assistant.
+
+### If it doesn't work
+
+- **Status *inloggen mislukt* with a message:** usually a wrong e-mail or
+  password — fix it in Configuration and restart. The 2FA form is shown in
+  this state too, in case Picnic reported the 2FA requirement in a way the
+  add-on didn't recognise; *Stuur code per sms* first retries the login.
+- **No SMS arrives:** wait a minute and press the button again, and check
+  the phone number on your account in the Picnic app. Codes are sent by
+  SMS only.
+- **"Code geaccepteerd, maar Picnic geeft nog geen toegang":** press
+  **Opnieuw inloggen** and request a fresh code.
+
 ## Exposing it to the internet
 
 The MCP port is **8097**, published on the host by default (change it in the
@@ -91,31 +158,57 @@ token and OAuth login. It costs one extra hostname in your tunnel.
 
 ### Cloudflare Tunnel
 
-**Tunnel managed in the Cloudflare dashboard** (the Cloudflared add-on has a
-`tunnel_token` set): in Cloudflare Zero Trust go to **Networks → Tunnels →**
-your tunnel **→ Public hostnames → Add a public hostname**:
+You need a domain whose DNS is on Cloudflare, and the **Cloudflared**
+add-on (repository `https://github.com/homeassistant-apps/repository`, add
+it the same way as this one). Cloudflared opens an outbound tunnel, so no
+ports are opened on your router. How you add a hostname depends on how the
+tunnel is set up:
 
-- *Subdomain* `picnic`, *Domain* your domain.
-- *Service* `HTTP`, URL `<HA host>:8097` — the same LAN address your other
-  hostnames point at, with port 8097. HTTP, not HTTPS: Cloudflare terminates
-  TLS, and the hop inside your network is plain HTTP.
+**A. Tunnel managed in the Cloudflare dashboard** — the Cloudflared add-on
+has a `tunnel_token` in its Configuration. Routes live in Cloudflare:
 
-Saving creates the DNS record (a proxied `CNAME` to
-`<tunnel-id>.cfargotunnel.com`).
+1. In the Cloudflare dashboard open **Zero Trust → Networks → Tunnels**,
+   pick your tunnel, then **Edit**.
+2. Open **Public hostnames** (called **Published application routes** in
+   newer dashboards) and **Add a public hostname**:
+   - *Subdomain* `picnic`, *Domain* your domain, *Path* empty.
+   - *Service type* `HTTP`, *URL* `<HA host>:8097` — the LAN address your
+     other hostnames already point at, with port 8097.
+   - HTTP, not HTTPS: Cloudflare terminates TLS; the hop inside your
+     network is plain HTTP.
+3. **Save.** Cloudflare creates the DNS record itself (a proxied `CNAME` to
+   `<tunnel-id>.cfargotunnel.com`) and the running Cloudflared add-on picks
+   up the new route without a restart.
 
-**Tunnel configured in the Cloudflared add-on itself** (no token): add to its
-`additional_hosts`:
+**B. Tunnel configured in the Cloudflared add-on** — no `tunnel_token`.
+Add the hostname to the add-on's `additional_hosts` and restart Cloudflared:
 
 ```yaml
-- hostname: picnic.example.com
-  service: http://<HA host>:8097
+additional_hosts:
+  - hostname: picnic.example.com
+    service: http://<HA host>:8097
 ```
 
-Then, either way:
+**Then, either way:**
 
 1. Set `mcp_url` in this add-on to `https://picnic.example.com/mcp` and
    restart it.
-2. Check that `https://picnic.example.com/health` answers `{"ok":true,…}`.
+2. Open `https://picnic.example.com/health` — it should answer
+   `{"ok":true,"name":"picnic-mcp"}`.
+3. Connect Claude (next section).
+
+If you change the add-on's port in its Network tab, change the tunnel's
+service URL to match.
+
+**Troubleshooting**
+
+| You see | Likely cause |
+|---|---|
+| `502` / *Bad gateway* at `/health` | The add-on isn't running, or the service URL has the wrong IP or port. |
+| Cloudflare error *1033* | The tunnel itself is down — check the Cloudflared add-on's log. |
+| `{"error":"not_found"}` | The request reached the add-on but on the wrong path: the URL must end in `/mcp`. |
+| `401` on `/mcp` in a browser | Expected — the endpoint needs a token. |
+| Claude can't connect, `/health` works | Check that `mcp_url` is exactly the URL you gave Claude. Cloudflare **Access** or a bot challenge in front of the hostname will also block Claude's login flow. |
 
 ### Any other reverse proxy
 

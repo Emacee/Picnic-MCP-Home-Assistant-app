@@ -38,8 +38,12 @@ deliveries. You still check out in the Picnic app yourself.
    Repositories** and add `https://github.com/Emacee/Picnic-MCP-Home-Assistant-app`.
 2. Install **Picnic MCP**, fill in your Picnic e-mail, password and country
    on the **Configuration** tab, and start it.
-3. Open the add-on's web UI. If your account uses 2FA, request a code there
-   and enter it.
+3. Open the add-on's web UI. If your account uses two-factor
+   authentication, the status reads *wacht op 2FA-code*: press **Stuur code
+   per sms**, enter the code from the SMS and press **Verifiëren**. The
+   session is stored, so you only do this again if Picnic ends it. The
+   *Two-factor authentication* section of the Documentation tab has the
+   details.
 
 Requires a 64-bit Home Assistant OS or Supervised install (`amd64` or `aarch64`).
 
@@ -48,15 +52,20 @@ Requires a 64-bit Home Assistant OS or Supervised install (`amd64` or `aarch64`)
 On your own network the MCP endpoint is `http://<HA host>:8097/mcp`.
 
 To use it from your phone or claude.ai, give it **its own subdomain** through
-a [Cloudflare Tunnel](https://github.com/homeassistant-apps/app-cloudflared)
-(or any reverse proxy):
+a Cloudflare Tunnel — the
+[Cloudflared add-on](https://github.com/homeassistant-apps/app-cloudflared)
+(repository `https://github.com/homeassistant-apps/repository`) — or any
+reverse proxy:
 
 ```
 https://picnic.example.com/mcp  ──►  http://<HA host>:8097/mcp
 ```
 
 1. Add a public hostname `picnic.example.com` to your tunnel with service
-   `http://<HA host>:8097`. Cloudflare creates the DNS record.
+   `http://<HA host>:8097`: in the Cloudflare dashboard under **Zero Trust →
+   Networks → Tunnels →** your tunnel **→ Public hostnames** (*Published
+   application routes* in newer dashboards), or in the Cloudflared add-on's
+   `additional_hosts`. Cloudflare creates the DNS record.
 2. Set `mcp_url` in this add-on to `https://picnic.example.com/mcp` and
    restart it.
 3. In Claude: **Settings → Connectors → Add custom connector** →
