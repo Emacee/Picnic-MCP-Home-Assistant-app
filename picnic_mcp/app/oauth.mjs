@@ -9,16 +9,6 @@
 // token can approve a new client, which then gets its own opaque
 // access/refresh tokens instead of the shared secret itself.
 //
-// By default the add-on is served at the root of its own hostname, and then
-// this is an ordinary root-mounted server. It can also live under a prefix
-// (e.g. /picnic) to share one public hostname with other MCP servers. Its
-// issuer is then https://host/picnic, and RFC 8414 / RFC 9728 put the
-// metadata for such an issuer at
-// /.well-known/<kind>/picnic — a path at the ROOT of the host, not under the
-// prefix. Both forms are served here, plus the OIDC-style
-// /picnic/.well-known/... that some clients try as a fallback, and the
-// gateway claims all of them when it decides what to forward elsewhere.
-//
 // Deliberately simple: opaque random tokens looked up server-side (no JWT),
 // one fixed scope, public clients + PKCE only, rotating refresh tokens, and a
 // flat JSON file for persistence. Proportionate to a one-person deployment.
@@ -67,12 +57,11 @@ function redirectHost(uri) {
 /**
  * @param {object} opts
  * @param {string} opts.storePath      JSON file for clients and tokens (under /data)
- * @param {string} opts.basePath       e.g. "/picnic", or "" for the host root
  * @param {string} opts.publicOrigin   origin from mcp_url, or "" to use the request's host
  * @param {() => string} opts.getAuthToken
  * @param {(level: string, msg: string, extra?: object) => void} opts.log
  */
-export function createOAuth({ storePath, basePath, publicOrigin, getAuthToken, log }) {
+export function createOAuth({ storePath, publicOrigin, getAuthToken, log }) {
   const empty = () => ({ clients: {}, accessTokens: {}, refreshTokens: {} });
   let store;
   try {
@@ -140,19 +129,18 @@ export function createOAuth({ storePath, basePath, publicOrigin, getAuthToken, l
   // which the caller controls. Prefer the operator's configured origin so the
   // discovery documents can't be made to advertise someone else's hostname.
   const origin = (req) => publicOrigin || `${req.protocol}://${req.get("host")}`;
-  const issuer = (req) => `${origin(req)}${basePath}`;
 
   function protectedResourceMetadata(req, res) {
     res.json({
-      resource: `${issuer(req)}/mcp`,
-      authorization_servers: [issuer(req)],
+      resource: `${origin(req)}/mcp`,
+      authorization_servers: [origin(req)],
       scopes_supported: ["mcp"],
       bearer_methods_supported: ["header"],
     });
   }
 
   function authorizationServerMetadata(req, res) {
-    const base = issuer(req);
+    const base = origin(req);
     res.json({
       issuer: base,
       authorization_endpoint: `${base}/authorize`,
@@ -195,7 +183,7 @@ export function createOAuth({ storePath, basePath, publicOrigin, getAuthToken, l
   <p class="small">After approval you are sent back to <code>${escapeHtml(redirectHost(redirectUri))}</code>.
   Only continue if that is the app you are connecting.</p>
   ${error ? `<p class="error">${escapeHtml(error)}</p>` : ""}
-  <form method="post" action="${escapeHtml(`${basePath}/authorize`)}">
+  <form method="post" action="/authorize">
     ${hidden}
     <label for="token">Bearer token</label>
     <input type="password" id="token" name="token" autocomplete="off" autofocus required>
@@ -208,19 +196,14 @@ export function createOAuth({ storePath, basePath, publicOrigin, getAuthToken, l
   }
 
   const router = express.Router();
-  const ownPaths = [
-    `/.well-known/oauth-protected-resource${basePath}/mcp`,
-    `/.well-known/oauth-protected-resource${basePath}`,
-    `${basePath}/.well-known/oauth-protected-resource`,
-    `${basePath}/.well-known/oauth-protected-resource/mcp`,
-    `/.well-known/oauth-authorization-server${basePath}`,
-    `/.well-known/openid-configuration${basePath}`,
-    `${basePath}/.well-known/oauth-authorization-server`,
-    `${basePath}/.well-known/openid-configuration`,
-    `${basePath}/register`,
-    `${basePath}/authorize`,
-    `${basePath}/token`,
-  ];
+  // RFC 9728 puts the resource metadata for https://host/mcp at
+  // /.well-known/oauth-protected-resource/mcp; some clients ask without the
+  // suffix. Some also fall back to OIDC discovery for the server metadata.
+  const metadataPaths = {
+    resource: ["/.well-known/oauth-protected-resource/mcp", "/.well-known/oauth-protected-resource"],
+    server: ["/.well-known/oauth-authorization-server", "/.well-known/openid-configuration"],
+  };
+  const ownPaths = [...metadataPaths.resource, ...metadataPaths.server, "/register", "/authorize", "/token"];
 
   router.use((req, res, next) => {
     if (!ownPaths.includes(req.path)) return next();
@@ -234,11 +217,11 @@ export function createOAuth({ storePath, basePath, publicOrigin, getAuthToken, l
     next();
   });
 
-  for (const p of ownPaths.slice(0, 4)) router.get(p, protectedResourceMetadata);
-  for (const p of ownPaths.slice(4, 8)) router.get(p, authorizationServerMetadata);
+  for (const p of metadataPaths.resource) router.get(p, protectedResourceMetadata);
+  for (const p of metadataPaths.server) router.get(p, authorizationServerMetadata);
 
   // --- RFC 7591: Dynamic Client Registration ---
-  router.post(`${basePath}/register`, express.json({ limit: "64kb" }), (req, res) => {
+  router.post("/register", express.json({ limit: "64kb" }), (req, res) => {
     const body = req.body ?? {};
     const redirectUris = Array.isArray(body.redirect_uris)
       ? body.redirect_uris.filter((u) => typeof u === "string" && /^[a-z][a-z0-9+.-]*:/i.test(u))
@@ -277,7 +260,7 @@ export function createOAuth({ storePath, basePath, publicOrigin, getAuthToken, l
   });
 
   // --- /authorize: consent form gated by the add-on's bearer token ---
-  router.get(`${basePath}/authorize`, (req, res) => {
+  router.get("/authorize", (req, res) => {
     const { client_id, redirect_uri, response_type, code_challenge, code_challenge_method, state } = req.query;
     const client = typeof client_id === "string" ? store.clients[client_id] : undefined;
     if (!client) {
@@ -309,7 +292,7 @@ export function createOAuth({ storePath, basePath, publicOrigin, getAuthToken, l
     }));
   });
 
-  router.post(`${basePath}/authorize`, express.urlencoded({ extended: false, limit: "16kb" }), (req, res) => {
+  router.post("/authorize", express.urlencoded({ extended: false, limit: "16kb" }), (req, res) => {
     // Keyed on the raw socket address, never req.ip: "trust proxy" makes
     // req.ip the caller-controlled X-Forwarded-For. Behind a tunnel every
     // request shares one address, so this throttles consent globally —
@@ -356,7 +339,7 @@ export function createOAuth({ storePath, basePath, publicOrigin, getAuthToken, l
 
   // --- /token: authorization_code and refresh_token grants ---
   router.post(
-    `${basePath}/token`,
+    "/token",
     express.urlencoded({ extended: false, limit: "16kb" }),
     express.json({ limit: "16kb" }),
     (req, res) => {
@@ -399,9 +382,8 @@ export function createOAuth({ storePath, basePath, publicOrigin, getAuthToken, l
 
   return {
     router,
-    ownPaths,
     /** RFC 9728 document URL for the WWW-Authenticate header on a 401. */
-    resourceMetadataUrl: (req) => `${origin(req)}/.well-known/oauth-protected-resource${basePath}/mcp`,
+    resourceMetadataUrl: (req) => `${origin(req)}/.well-known/oauth-protected-resource/mcp`,
     isValidAccessToken(token) {
       const rec = store.accessTokens[token];
       if (!rec) return false;

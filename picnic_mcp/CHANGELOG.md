@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0
+
+- Removed hostname sharing: the `path_prefix` and `forward_other_paths_to`
+  options, the forwarder and the prefix-aware OAuth discovery paths are
+  gone. Each MCP add-on gets its own subdomain and serves at its root
+  (`https://picnic.example.com/mcp`), which needs none of that code. If you
+  had set either option, it is ignored; set the add-on up on its own
+  hostname instead.
+
 ## 0.2.0
 
 - **The add-on now serves at the root of its own hostname by default**:

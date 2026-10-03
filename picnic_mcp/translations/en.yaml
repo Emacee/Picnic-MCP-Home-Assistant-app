@@ -23,18 +23,6 @@ configuration:
       Shared secret for clients that send "Authorization: Bearer <token>",
       and the password on the OAuth approval page for Claude web and mobile.
       Leave blank and one is generated and saved here on first start.
-  path_prefix:
-    name: Path prefix
-    description: >-
-      Default / : the add-on is served at the root of its own hostname, with
-      MCP at /mcp. Only set a prefix such as /picnic if this add-on shares a
-      hostname with other services (advanced, see DOCS).
-  forward_other_paths_to:
-    name: Forward other paths to
-    description: >-
-      Advanced, normally blank. Only with a path_prefix: requests outside
-      the prefix are forwarded here (e.g. to another MCP add-on), so both
-      can share one hostname. See DOCS.
   allow_cart_changes:
     name: Allow cart changes
     description: >-

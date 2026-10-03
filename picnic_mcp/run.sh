@@ -18,10 +18,8 @@ export PICNIC_DEVICE_FILE="/data/picnic-device.json"
 # replaces that server, so make sure it is off.
 export ENABLE_HTTP_SERVER="false"
 
-export MCP_URL PATH_PREFIX FORWARD_TO LOG_LEVEL
+export MCP_URL LOG_LEVEL
 MCP_URL="$(bashio::config 'mcp_url')"
-PATH_PREFIX="$(bashio::config 'path_prefix')"
-FORWARD_TO="$(bashio::config 'forward_other_paths_to')"
 LOG_LEVEL="$(bashio::config 'log_level')"
 
 export ALLOW_CART_CHANGES ALLOW_DELIVERY_CHANGES ALLOW_ACCOUNT_DETAILS EXPOSE_2FA_TOOLS
@@ -31,11 +29,9 @@ ALLOW_ACCOUNT_DETAILS="$(bashio::config 'allow_account_details')"
 EXPOSE_2FA_TOOLS="$(bashio::config 'expose_2fa_tools')"
 
 # bashio prints "null" for unset optional options.
-for var in PICNIC_USERNAME PICNIC_PASSWORD MCP_URL PATH_PREFIX FORWARD_TO; do
+for var in PICNIC_USERNAME PICNIC_PASSWORD MCP_URL; do
   if [ "${!var}" = "null" ]; then printf -v "$var" '%s' ""; fi
 done
-# Blank or left out: serve at the root of the hostname (the default).
-if ! bashio::config.has_value 'path_prefix'; then PATH_PREFIX="/"; fi
 
 # Bearer token: no secret ships in config.yaml or this repo. If the
 # Configuration field is blank, generate one and write it back into this

@@ -64,9 +64,10 @@ https://picnic.example.com/mcp  ──►  http://<HA host>:8097/mcp
    that opens. The connector then works in the Claude apps on all your
    devices.
 
-The Documentation tab has the details, plus an advanced setup for sharing one
-hostname with another MCP add-on such as
-[Dutch Open Data MCP](https://github.com/Emacee/Dutch-Open-Data-MCP---Home-Assistant-App).
+Running other MCP add-ons, such as
+[Dutch Open Data MCP](https://github.com/Emacee/Dutch-Open-Data-MCP---Home-Assistant-App)?
+Give each its own subdomain the same way; they stay fully independent. The
+Documentation tab has the details.
 
 ## Security, briefly
 

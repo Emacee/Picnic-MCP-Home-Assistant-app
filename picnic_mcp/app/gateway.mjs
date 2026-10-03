@@ -7,7 +7,7 @@
 // public tunnel three of its choices get in the way:
 //
 //   * its rate limiter allows 100 requests per 15 minutes per client IP, and
-//     behind a tunnel or the forwarding below every request has the same IP,
+//     behind a tunnel every request has the same IP,
 //     so a single meal-planning conversation could lock everybody out;
 //   * a failed Picnic login at startup ends the process, which under
 //     Supervisor becomes a crash loop that retries a wrong password forever;
@@ -18,14 +18,10 @@
 //
 //   1. Bearer-token auth, plus a small OAuth 2.1 server (oauth.mjs) for
 //      clients without a header field (Claude web and mobile).
-//   2. Served at the root of its own hostname by default
-//      (https://picnic.example.com/mcp). Optionally under a path prefix with
-//      everything else forwarded to another service (forward.mjs), so one
-//      public hostname can carry several MCP add-ons.
-//   3. Tool groups the operator switches on explicitly; tools this add-on
+//   2. Tool groups the operator switches on explicitly; tools this add-on
 //      doesn't know (added by a future upstream pin) are withheld until
 //      someone reviews them.
-//   4. A login state machine with 2FA and re-login from the ingress
+//   3. A login state machine with 2FA and re-login from the ingress
 //      dashboard, and tools that refuse politely instead of re-trying a
 //      broken login on every call.
 import { createHash, randomUUID } from "node:crypto";
@@ -46,7 +42,6 @@ import {
 import { installFetchProxy } from "../src/utils/proxy.ts";
 
 import { createOAuth, timingSafeEqualStr } from "./oauth.mjs";
-import { createForwarder, parseForwardTarget, probeForwardTarget } from "./forward.mjs";
 
 /* ------------------------------------------------------------------ */
 /* Configuration (exported by run.sh from the add-on options)          */
@@ -75,27 +70,14 @@ function log(level, msg, extra) {
   process.stderr.write(JSON.stringify({ time: new Date().toISOString(), level, msg, ...extra }) + "\n");
 }
 
-/** "/picnic", "picnic/", " /picnic " → "/picnic"; "" or "/" → "". */
-function normalisePrefix(raw) {
-  const trimmed = String(raw ?? "").trim().replace(/^\/+|\/+$/g, "");
-  if (!trimmed) return "";
-  if (!/^[A-Za-z0-9._~-]+(\/[A-Za-z0-9._~-]+)*$/.test(trimmed)) {
-    log("error", "path_prefix may only contain letters, digits and . _ ~ - (and / between segments); serving at the root instead", { path_prefix: raw });
-    return "";
-  }
-  return `/${trimmed}`;
-}
-const PREFIX = normalisePrefix(process.env.PATH_PREFIX ?? "/");
-
 // The public origin OAuth discovery advertises, from the operator's mcp_url
 // rather than from the request, whose forwarded Host the caller controls.
 const PUBLIC_ORIGIN = (() => {
   if (!MCP_URL) return "";
   try {
     const url = new URL(MCP_URL);
-    const expected = `${PREFIX}/mcp`;
-    if (url.pathname.replace(/\/+$/, "") !== expected) {
-      log("warning", `mcp_url's path is "${url.pathname}" but this add-on serves MCP at "${expected}" — clients must use the latter`, { mcp_url: MCP_URL });
+    if (url.pathname.replace(/\/+$/, "") !== "/mcp") {
+      log("warning", `mcp_url's path is "${url.pathname}" but this add-on serves MCP at "/mcp" — clients must use the latter`, { mcp_url: MCP_URL });
     }
     return url.origin;
   } catch {
@@ -103,19 +85,6 @@ const PUBLIC_ORIGIN = (() => {
     return "";
   }
 })();
-
-let FORWARD_TARGET = null;
-let forwardConfigError = "";
-try {
-  FORWARD_TARGET = parseForwardTarget(process.env.FORWARD_TO);
-  if (FORWARD_TARGET && !PREFIX) {
-    forwardConfigError = "forwarding needs a path_prefix such as /picnic: at the root this add-on owns every path, so nothing would be left to forward";
-    FORWARD_TARGET = null;
-  }
-} catch (err) {
-  forwardConfigError = err.message;
-}
-if (forwardConfigError) log("error", `forward_other_paths_to ignored: ${forwardConfigError}`);
 
 /* ------------------------------------------------------------------ */
 /* Tool policy                                                        */
@@ -346,7 +315,6 @@ const serverFactory = new SessionServerFactory();
 
 const oauth = createOAuth({
   storePath: `${DATA_DIR}/oauth-store.json`,
-  basePath: PREFIX,
   publicOrigin: PUBLIC_ORIGIN,
   getAuthToken: () => AUTH_TOKEN,
   log,
@@ -433,29 +401,15 @@ const app = express();
 app.set("trust proxy", true);
 app.disable("x-powered-by");
 
-const forwardRequest = FORWARD_TARGET ? createForwarder(FORWARD_TARGET, log) : null;
-function ownsPath(path) {
-  if (!PREFIX) return true;
-  return path === PREFIX || path.startsWith(`${PREFIX}/`) || oauth.ownPaths.includes(path);
-}
-
-// First, before any body parser: a forwarded request's body must stream
-// through untouched.
-app.use((req, res, next) => {
-  if (ownsPath(req.path)) return next();
-  if (forwardRequest) return forwardRequest(req, res);
-  res.status(404).json({ error: "not_found", message: `This server answers under ${PREFIX}/` });
-});
-
 app.use(oauth.router);
 
 // Liveness only, so it can stay unauthenticated on a public hostname.
-app.get(`${PREFIX}/health`, (_req, res) => {
+app.get("/health", (_req, res) => {
   res.json({ ok: true, name: "picnic-mcp" });
 });
 
 app.all(
-  `${PREFIX}/mcp`,
+  "/mcp",
   requireBearerAuth,
   express.json({ limit: "4mb" }),
   async (req, res) => {
@@ -490,14 +444,9 @@ function maskEmail(email) {
   return `${user.slice(0, 1)}•••@${domain}`;
 }
 
-let forwardProbe = null;
-async function refreshForwardProbe() {
-  if (FORWARD_TARGET) forwardProbe = await probeForwardTarget(FORWARD_TARGET);
-}
-
 function renderDashboard(banner = "") {
   const stateClass = picnic.state === "ready" ? "ok" : picnic.state === "failed" ? "bad" : "warn";
-  const mcpUrl = MCP_URL || `http://<home-assistant-host>:${PORT}${PREFIX}/mcp`;
+  const mcpUrl = MCP_URL || `http://<home-assistant-host>:${PORT}/mcp`;
 
   const twoFa = picnic.state === "needs_2fa" || picnic.state === "failed" ? `
   <h2>Tweestapsverificatie</h2>
@@ -508,16 +457,6 @@ function renderDashboard(banner = "") {
     <input class="mono" name="code" inputmode="numeric" autocomplete="one-time-code" placeholder="code uit de sms" required>
     <button type="submit">Verifiëren</button>
   </form>` : "";
-
-  const forwardRow = forwardConfigError
-    ? `<span class="bad">● genegeerd — ${escapeHtml(forwardConfigError)}</span>`
-    : !FORWARD_TARGET
-    ? '<span class="off">○ uit — andere paden krijgen 404</span>'
-    : forwardProbe?.reachable
-    ? `<span class="ok">● ${escapeHtml(FORWARD_TARGET.origin)} bereikbaar</span>`
-    : forwardProbe
-    ? `<span class="bad">● ${escapeHtml(FORWARD_TARGET.origin)} niet bereikbaar (${escapeHtml(forwardProbe.error)})</span>`
-    : `<span class="warn">● ${escapeHtml(FORWARD_TARGET.origin)}</span>`;
 
   const groupRows = Object.entries(TOOL_GROUPS).map(([group, def]) => {
     const on = groupEnabled(group);
@@ -580,10 +519,6 @@ function renderDashboard(banner = "") {
     <input class="mono" readonly value="${escapeHtml(mcpUrl)}" onclick="this.select()">
     <button onclick="navigator.clipboard.writeText(this.previousElementSibling.value)">Kopieer URL</button>
   </div>
-  <table>
-    <tr><td>Pad</td><td><code>${escapeHtml(PREFIX || "/")}</code> — MCP op <code>${escapeHtml(PREFIX)}/mcp</code></td></tr>
-    <tr><td>Overige paden doorsturen</td><td>${forwardRow}</td></tr>
-  </table>
   <p class="small">Het bearer-token staat op het tabblad <strong>Configuratie</strong> (<code>mcp_auth_token</code>).
   Clients met een header-veld sturen het als <code>Authorization: Bearer &lt;token&gt;</code>; Claude op web en
   mobiel vraagt er eenmalig om op een inlogpagina (OAuth).</p>
@@ -638,8 +573,7 @@ const BANNERS = {
   revoked: "Alle OAuth-tokens zijn ingetrokken.",
 };
 
-webApp.get("/", async (req, res) => {
-  await refreshForwardProbe();
+webApp.get("/", (req, res) => {
   let banner = "";
   const key = Object.keys(BANNERS).find((k) => req.query[k] !== undefined);
   if (key) banner = `<div class="banner ok">${escapeHtml(BANNERS[key])}</div>`;
@@ -705,9 +639,7 @@ webApp.post("/revoke-oauth", (_req, res) => {
 await installFetchProxy();
 
 const httpServer = app.listen(PORT, () => {
-  log("info", `MCP endpoint listening on :${PORT}${PREFIX}/mcp`, {
-    forwarding: FORWARD_TARGET ? FORWARD_TARGET.origin : "off",
-  });
+  log("info", `MCP endpoint listening on :${PORT}/mcp`);
 });
 httpServer.on("error", (err) => {
   log("error", "HTTP server error", { err: String(err) });

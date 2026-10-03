@@ -39,8 +39,6 @@ machine.
 | `country_code` | `NL`, `DE` or `FR`. Changing the account or country discards the stored session automatically. |
 | `mcp_url` | Public URL clients use, e.g. `https://picnic.example.com/mcp`. Its origin becomes the OAuth issuer, instead of trusting the request's `Host` header. Leave blank for local use. |
 | `mcp_auth_token` | Bearer token. Generated on first start if blank; set your own to override (keep it long and random). Also the password on the OAuth approval page. |
-| `path_prefix` | Default `/`: MCP at `/mcp`, health at `/health`, OAuth endpoints at the root. Only change it to share a hostname — see *Advanced*. |
-| `forward_other_paths_to` | Advanced, normally blank. Only used together with a `path_prefix` — see *Advanced*. |
 | `allow_cart_changes` | Default **on**. Add/remove products and recipes in the cart, clear the cart, save/unsave recipes. Nothing is ordered until you check out in the app. |
 | `allow_delivery_changes` | Default **off**. Choose a delivery slot, cancel or rate a delivery, e-mail an invoice. |
 | `allow_account_details` | Default **off**. Read profile, payment profile and wallet transactions. |
@@ -86,8 +84,10 @@ The MCP port is **8097**, published on the host by default (change it in the
 Network tab if it clashes). It deliberately doesn't go through Home Assistant
 Ingress: MCP clients need a plain URL and a token, not a browser session.
 
-Give the add-on **its own subdomain**. It costs one extra hostname in your
-tunnel and keeps it fully independent of everything else you expose.
+Give the add-on **its own subdomain**. Each MCP add-on gets its own
+hostname (e.g. `picnic.example.com`, `nlgov-mcp.example.com`), so they stay
+fully independent: each serves at the root of its hostname, with its own
+token and OAuth login. It costs one extra hostname in your tunnel.
 
 ### Cloudflare Tunnel
 
@@ -152,73 +152,16 @@ PKCE. Access tokens last an hour; refresh tokens rotate on every use and
 expire after 90 days without use. Revoke all of them from the web UI at any
 time; the bearer token itself is unaffected.
 
-## Advanced: sharing one hostname with another MCP add-on
-
-Only if you really want a single hostname for several MCP servers — a
-separate subdomain per add-on is simpler and keeps them independent. With
-`path_prefix` set, this add-on serves everything under that prefix and can
-forward every other path to another service, so one hostname carries both:
-
-```
-https://mcp.example.com/picnic/mcp   handled here
-https://mcp.example.com/.well-known/oauth-*/picnic...   handled here (OAuth discovery)
-https://mcp.example.com/<anything else>   forwarded to forward_other_paths_to
-```
-
-1. **Set `path_prefix: /picnic`.**
-2. **Find the other add-on's address.** Open it in Home Assistant
-   (**Settings → Add-ons →** the add-on). The browser's address bar ends in
-   `/hassio/addon/<slug>/info`. Its hostname on the internal add-on network
-   is that slug with `_` replaced by `-` — for example
-   `abcd1234_dutch_open_data_mcp` becomes `abcd1234-dutch-open-data-mcp`.
-   Dutch Open Data MCP listens on port 8098, so:
-   ```
-   forward_other_paths_to: http://abcd1234-dutch-open-data-mcp:8098
-   ```
-   If that name doesn't resolve, the other add-on's host port works too:
-   `http://172.30.32.1:8098` (the Supervisor network's gateway is the host).
-3. **Restart this add-on** and open its web UI. *Overige paden doorsturen*
-   should say *bereikbaar*.
-4. **Point the shared hostname at this add-on** (`<HA host>:8097`) instead of
-   at the other one.
-5. **Set each add-on's `mcp_url`** to its own URL on that hostname:
-   `https://mcp.example.com/picnic/mcp` here, `https://mcp.example.com/mcp`
-   in Dutch Open Data MCP. Restart both, and re-add a connector in Claude if
-   its URL changed.
-6. Check `https://mcp.example.com/picnic/health` and
-   `https://mcp.example.com/health` — the second one answers from the other
-   add-on.
-
-Each server keeps its own token, OAuth clients and tools. Their OAuth
-discovery documents live at different paths
-(`/.well-known/oauth-authorization-server/picnic` here, the plain
-`/.well-known/oauth-authorization-server` there), so they don't collide.
-
-Forwarding streams request and response bodies without buffering, passes the
-`Authorization` header through unchanged, and adds
-`X-Forwarded-For/-Proto/-Host`. The trade-off: if this add-on is stopped, the
-forwarded service is unreachable through that hostname too.
-
-**Alternative without forwarding** (dashboard-managed tunnels only): two
-public hostnames with the same hostname. The first with path
-`^/(picnic|\.well-known/[^/]+/picnic)(/|$)` → `<HA host>:8097`, the second
-without a path → the other add-on. Cloudflare evaluates them top to bottom,
-so the Picnic one must be listed first. The Cloudflared add-on's own
-`additional_hosts` has no path option.
-
 ## Security
 
 ### What is exposed where
-
-Paths below are for the default `path_prefix` of `/`; with a prefix they sit
-under it.
 
 | Port / path | Reachable from | Protection |
 |---|---|---|
 | `8097` `/mcp` | LAN, and the internet through your tunnel | Bearer token or an OAuth access token |
 | `8097` `/authorize`, `/token`, `/register`, `/.well-known/*` | Same | Public by design; approving a client needs the bearer token (throttled to 8 tries per 15 min) |
 | `8097` `/health` | Same | None — returns only `{"ok":true}` |
-| `8097` other paths | Same | `404`; or, with a prefix and `forward_other_paths_to`, forwarded as-is and that service's own auth applies |
+| `8097` other paths | Same | `404` |
 | `8096` web UI | Home Assistant Ingress only | Ingress login + source-address check |
 
 Publishing port 8097 makes it reachable from your whole LAN, tunnel or not.
@@ -260,7 +203,7 @@ requests to Picnic's own servers.
   esbuild in the Dockerfile's build stage. It reuses upstream's tool
   registry, MCP request handlers (`BaseTransportServer`) and Picnic client,
   and replaces only upstream's HTTP transport. `app/oauth.mjs` is the OAuth
-  server, `app/forward.mjs` the forwarder.
+  server.
 - To pick up a newer upstream: bump `MCP_PICNIC_COMMIT` in the Dockerfile,
   compare upstream's `src/tools/picnic-tools.ts` against `TOOL_GROUPS` and
   classify any new tool, bump `version` in `config.yaml`, and add a
