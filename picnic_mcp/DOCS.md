@@ -194,6 +194,10 @@ The Picnic password and the bearer token live in this add-on's options
 session (`picnic-session.json`), a random device id, and OAuth clients and
 tokens (`oauth-store.json`) live beside it in `/data`, readable only by the
 add-on, and are included in Home Assistant backups — encrypt your backups.
+OAuth tokens are stored only as SHA-256 hashes, so a copied backup can't be
+used to act as your connected clients. The Picnic session itself can't be
+hashed (the add-on has to send it to Picnic), which is one more reason to
+encrypt backups.
 Nothing is written to this repository, and nothing leaves your host except
 requests to Picnic's own servers.
 

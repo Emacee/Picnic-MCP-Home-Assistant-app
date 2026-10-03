@@ -20,11 +20,24 @@ const ACCESS_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 const REFRESH_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000; // 90 days, sliding (rotated on use)
 const AUTH_CODE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const MAX_CLIENTS = 200;
+const STORE_VERSION = 2;
 
 // Brute-force throttle on the consent form. The token is 256-bit random by
 // default, so this is defence in depth, not the primary defence.
 const MAX_ATTEMPTS = 8;
 const ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
+
+/**
+ * Tokens are stored as SHA-256 hashes, never as themselves. /data — and so
+ * the token store — is included in every Home Assistant backup, which people
+ * copy to NAS shares and cloud drives. A plaintext store would let anyone
+ * holding a backup use your Picnic account as your connected clients until
+ * the tokens expired or were revoked; hashes are useless to them. The tokens
+ * are 256-bit random, so a plain unsalted hash is enough.
+ */
+function hashToken(token) {
+  return createHash("sha256").update(token).digest("hex");
+}
 
 function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, (c) => (
@@ -62,10 +75,22 @@ function redirectHost(uri) {
  * @param {(level: string, msg: string, extra?: object) => void} opts.log
  */
 export function createOAuth({ storePath, publicOrigin, getAuthToken, log }) {
-  const empty = () => ({ clients: {}, accessTokens: {}, refreshTokens: {} });
+  const empty = () => ({ version: STORE_VERSION, clients: {}, accessTokens: {}, refreshTokens: {} });
   let store;
+  let migrated = false;
   try {
-    store = { ...empty(), ...JSON.parse(fs.readFileSync(storePath, "utf8")) };
+    const raw = JSON.parse(fs.readFileSync(storePath, "utf8"));
+    store = { ...empty(), ...raw };
+    if ((raw.version ?? 1) < STORE_VERSION) {
+      // v1 keyed tokens by their plaintext value. Re-key by hash so existing
+      // clients keep working across the upgrade; the plaintext leaves the
+      // disk with the save below.
+      const rekey = (map) => Object.fromEntries(Object.entries(map ?? {}).map(([t, rec]) => [hashToken(t), rec]));
+      store.accessTokens = rekey(raw.accessTokens);
+      store.refreshTokens = rekey(raw.refreshTokens);
+      store.version = STORE_VERSION;
+      migrated = true;
+    }
   } catch {
     store = empty();
   }
@@ -76,13 +101,17 @@ export function createOAuth({ storePath, publicOrigin, getAuthToken, log }) {
     fs.renameSync(tmp, storePath);
   }
 
+  if (migrated) {
+    try { save(); } catch { /* retried on the next save */ }
+  }
+
   function prune() {
     const now = Date.now();
-    for (const [t, rec] of Object.entries(store.accessTokens)) {
-      if (rec.expires_at < now) delete store.accessTokens[t];
+    for (const [hash, rec] of Object.entries(store.accessTokens)) {
+      if (rec.expires_at < now) delete store.accessTokens[hash];
     }
-    for (const [t, rec] of Object.entries(store.refreshTokens)) {
-      if (rec.expires_at && rec.expires_at < now) delete store.refreshTokens[t];
+    for (const [hash, rec] of Object.entries(store.refreshTokens)) {
+      if (rec.expires_at && rec.expires_at < now) delete store.refreshTokens[hash];
     }
   }
 
@@ -91,8 +120,8 @@ export function createOAuth({ storePath, publicOrigin, getAuthToken, log }) {
     const now = Date.now();
     const accessToken = randomBytes(32).toString("hex");
     const refreshToken = randomBytes(32).toString("hex");
-    store.accessTokens[accessToken] = { client_id: clientId, issued_at: now, expires_at: now + ACCESS_TOKEN_TTL_MS };
-    store.refreshTokens[refreshToken] = { client_id: clientId, issued_at: now, expires_at: now + REFRESH_TOKEN_TTL_MS };
+    store.accessTokens[hashToken(accessToken)] = { client_id: clientId, issued_at: now, expires_at: now + ACCESS_TOKEN_TTL_MS };
+    store.refreshTokens[hashToken(refreshToken)] = { client_id: clientId, issued_at: now, expires_at: now + REFRESH_TOKEN_TTL_MS };
     save();
     return {
       access_token: accessToken,
@@ -233,7 +262,13 @@ export function createOAuth({ storePath, publicOrigin, getAuthToken, log }) {
 
     const ids = Object.keys(store.clients);
     if (ids.length >= MAX_CLIENTS) {
-      const oldest = ids.sort((a, b) => store.clients[a].created_at - store.clients[b].created_at)[0];
+      // Make room by evicting the oldest client that holds no live refresh
+      // token. Plain oldest-first would let anyone flood /register until the
+      // client you actually authorised was pushed out.
+      const active = new Set(Object.values(store.refreshTokens).map((r) => r.client_id));
+      const evictable = ids.filter((id) => !active.has(id));
+      const pool = evictable.length > 0 ? evictable : ids;
+      const oldest = pool.reduce((a, b) => (store.clients[a].created_at <= store.clients[b].created_at ? a : b));
       delete store.clients[oldest];
     }
 
@@ -365,13 +400,14 @@ export function createOAuth({ storePath, publicOrigin, getAuthToken, log }) {
 
       if (body.grant_type === "refresh_token") {
         const { refresh_token, client_id } = body;
-        const rec = typeof refresh_token === "string" ? store.refreshTokens[refresh_token] : undefined;
+        const hash = typeof refresh_token === "string" ? hashToken(refresh_token) : undefined;
+        const rec = hash ? store.refreshTokens[hash] : undefined;
         if (!rec || (rec.expires_at && rec.expires_at < Date.now()) || (client_id && rec.client_id !== client_id) || !store.clients[rec.client_id]) {
           res.status(400).json({ error: "invalid_grant" });
           return;
         }
         // Rotate: the presented refresh token is spent, a new pair is issued.
-        delete store.refreshTokens[refresh_token];
+        delete store.refreshTokens[hash];
         res.json(issueTokens(rec.client_id));
         return;
       }
@@ -384,15 +420,11 @@ export function createOAuth({ storePath, publicOrigin, getAuthToken, log }) {
     router,
     /** RFC 9728 document URL for the WWW-Authenticate header on a 401. */
     resourceMetadataUrl: (req) => `${origin(req)}/.well-known/oauth-protected-resource/mcp`,
+    // Read-only on purpose: expired entries are pruned the next time tokens
+    // are issued, so checking a token never writes to disk on the request path.
     isValidAccessToken(token) {
-      const rec = store.accessTokens[token];
-      if (!rec) return false;
-      if (rec.expires_at < Date.now()) {
-        delete store.accessTokens[token];
-        save();
-        return false;
-      }
-      return true;
+      const rec = store.accessTokens[hashToken(token)];
+      return Boolean(rec) && rec.expires_at >= Date.now();
     },
     listClients() {
       return Object.values(store.clients)

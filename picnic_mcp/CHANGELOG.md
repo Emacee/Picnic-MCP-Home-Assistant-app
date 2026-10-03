@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.0
+
+Security hardening, matching Dutch Open Data MCP 1.1.0.
+
+- OAuth tokens are now stored as SHA-256 hashes. `/data` is in every Home
+  Assistant backup, so a plaintext store let anyone holding a backup act as
+  your connected clients. The existing store is migrated on first start;
+  connected clients keep working.
+- `trust proxy` now trusts forwarded headers only from private addresses
+  (where cloudflared or a LAN proxy connects from), not from any client.
+- Flooding `/register` can no longer evict the client you actually
+  authorised: eviction now skips clients holding a live refresh token.
+- Accepts `bearer` in any letter case, per RFC 7235.
+- A rejected `initialize` no longer leaks its MCP server and transport.
+- Checking an OAuth token no longer writes to disk on the request path.
+
 ## 0.3.0
 
 - Removed hostname sharing: the `path_prefix` and `forward_other_paths_to`

@@ -321,8 +321,10 @@ const oauth = createOAuth({
 });
 
 function requireBearerAuth(req, res, next) {
-  const [scheme, token] = (req.headers.authorization ?? "").split(" ");
-  const valid = scheme === "Bearer" && Boolean(token) && (
+  // The auth scheme is case-insensitive (RFC 7235 §2.1), and some clients
+  // send "bearer"; the token itself is compared exactly.
+  const token = /^bearer\s+(\S+)\s*$/i.exec(req.headers.authorization ?? "")?.[1];
+  const valid = Boolean(token) && (
     (AUTH_TOKEN && timingSafeEqualStr(token, AUTH_TOKEN)) || oauth.isValidAccessToken(token)
   );
   if (!valid) {
@@ -389,6 +391,12 @@ async function handleMcp(req, res) {
   };
   await server.connect(transport);
   await transport.handleRequest(req, res, req.body);
+  // A rejected initialize never gets a session id, so nothing else would
+  // ever close this server and transport.
+  if (!transport.sessionId || !sessions.has(transport.sessionId)) {
+    transport.close().catch(() => undefined);
+    server.close().catch(() => undefined);
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -397,8 +405,12 @@ async function handleMcp(req, res) {
 
 const app = express();
 // The tunnel terminates TLS and sends X-Forwarded-Proto; without this the
-// OAuth fallback URLs would say http://.
-app.set("trust proxy", true);
+// OAuth fallback URLs would say http://. Trusted only from private addresses
+// (where cloudflared or a LAN proxy connects from), so a client reaching the
+// port directly can't claim a scheme or host of its choosing. Nothing
+// security-relevant reads these values anyway: the consent throttle uses the
+// socket address and OAuth metadata uses mcp_url.
+app.set("trust proxy", "loopback, linklocal, uniquelocal");
 app.disable("x-powered-by");
 
 app.use(oauth.router);
