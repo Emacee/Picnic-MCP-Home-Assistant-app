@@ -42,6 +42,7 @@ import {
 import { installFetchProxy } from "../src/utils/proxy.ts";
 
 import { createOAuth, timingSafeEqualStr } from "./oauth.mjs";
+import { iconRoutes, loadIcon, serverIcons, withBranding } from "./branding.mjs";
 
 /* ------------------------------------------------------------------ */
 /* Configuration (exported by run.sh from the add-on options)          */
@@ -85,6 +86,10 @@ const PUBLIC_ORIGIN = (() => {
     return "";
   }
 })();
+
+// Shipped next to the bundle by the Dockerfile; see branding.mjs.
+const ICON_PNG = loadIcon(new URL("./icon.png", import.meta.url));
+const SERVER_ICONS = serverIcons(ICON_PNG, PUBLIC_ORIGIN);
 
 /* ------------------------------------------------------------------ */
 /* Tool policy                                                        */
@@ -308,7 +313,7 @@ class SessionServerFactory extends BaseTransportServer {
   async start() {}
   async stop() {}
   create() {
-    return this.createConfiguredServer();
+    return withBranding(this.createConfiguredServer(), { title: "Picnic", icons: SERVER_ICONS });
   }
 }
 const serverFactory = new SessionServerFactory();
@@ -419,6 +424,8 @@ app.use(oauth.router);
 app.get("/health", (_req, res) => {
   res.json({ ok: true, name: "picnic-mcp" });
 });
+
+iconRoutes(app, ICON_PNG);
 
 app.all(
   "/mcp",

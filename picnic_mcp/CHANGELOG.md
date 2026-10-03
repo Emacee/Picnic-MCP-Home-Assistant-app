@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.1
+
+- The add-on's icon is now offered to MCP clients: as `serverInfo.icons`
+  in the initialize response (MCP spec 2025-11-25), and as `/favicon.ico`,
+  `/favicon.png`, `/icon.png` and `/apple-touch-icon.png` on the public
+  hostname. Claude doesn't show icons for custom connectors yet; this is
+  in place for when it does.
+
 ## 0.4.0
 
 Security hardening, matching Dutch Open Data MCP 1.1.0.

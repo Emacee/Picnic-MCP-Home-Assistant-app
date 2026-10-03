@@ -46,6 +46,8 @@ FROM ${BUILD_FROM}
 RUN apk add --no-cache nodejs jq
 
 COPY --from=build /build/out/ /app/
+# Served as the favicon and sent to MCP clients as serverInfo.icons.
+COPY icon.png /app/icon.png
 COPY run.sh /run.sh
 RUN chmod a+x /run.sh
 
