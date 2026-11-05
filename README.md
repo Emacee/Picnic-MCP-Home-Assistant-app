@@ -27,6 +27,8 @@ deliveries. You still check out in the Picnic app yourself.
   and reading account or payment details are off until you turn them on.
 - **2FA and login status** in a small web UI inside Home Assistant, instead of
   a crash loop when a password is wrong.
+- **Dashboard language** follows the selected Picnic country: German for DE,
+  Dutch for NL and French for FR, with English as the fallback.
 
 ## Install
 

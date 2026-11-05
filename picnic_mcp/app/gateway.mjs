@@ -43,6 +43,7 @@ import { installFetchProxy } from "../src/utils/proxy.ts";
 
 import { createOAuth, timingSafeEqualStr } from "./oauth.mjs";
 import { iconRoutes, loadIcon, serverIcons, withBranding } from "./branding.mjs";
+import { messagesForCountry } from "./i18n.mjs";
 
 /* ------------------------------------------------------------------ */
 /* Configuration (exported by run.sh from the add-on options)          */
@@ -56,6 +57,7 @@ const LOG_LEVEL = process.env.LOG_LEVEL ?? "info";
 const PICNIC_EMAIL = (process.env.PICNIC_USERNAME ?? "").trim();
 const PICNIC_PASSWORD = process.env.PICNIC_PASSWORD ?? "";
 const COUNTRY = process.env.PICNIC_COUNTRY_CODE ?? "NL";
+const t = messagesForCountry(COUNTRY);
 const DATA_DIR = process.env.DATA_DIR ?? "/data";
 const SESSION_FILE = process.env.PICNIC_SESSION_FILE ?? `${DATA_DIR}/picnic-session.json`;
 const SESSION_OWNER_FILE = `${DATA_DIR}/picnic-session.owner`;
@@ -170,16 +172,16 @@ const withheldTools = [];
 for (const name of [...registryMap.keys()]) {
   const group = groupOfTool.get(name);
   if (!group) {
-    withheldTools.push({ tool: name, reason: "niet beoordeeld door deze add-on (nieuw in upstream)" });
+    withheldTools.push({ tool: name, reason: t.unknownReason });
     registryMap.delete(name);
   } else if (!groupEnabled(group)) {
-    withheldTools.push({ tool: name, reason: `uitgeschakeld: ${TOOL_GROUPS[group].option.toLowerCase()}` });
+    withheldTools.push({ tool: name, reason: `${t.disabledReason}: ${TOOL_GROUPS[group].option.toLowerCase()}` });
     registryMap.delete(name);
   } else {
     publishedTools.push(name);
   }
 }
-const unknownTools = withheldTools.filter((t) => t.reason.startsWith("niet")).map((t) => t.tool);
+const unknownTools = withheldTools.filter((item) => !groupOfTool.has(item.tool)).map((item) => item.tool);
 if (unknownTools.length) {
   log("warning", "Upstream registers tools this add-on doesn't know; they are withheld", { tools: unknownTools });
 }
@@ -192,14 +194,8 @@ log("info", "Tool set resolved at startup", {
 /* Picnic login state                                                 */
 /* ------------------------------------------------------------------ */
 
-const STATE_LABEL = {
-  starting: "bezig met starten",
-  not_configured: "geen inloggegevens ingesteld",
-  logging_in: "bezig met inloggen",
-  ready: "ingelogd",
-  needs_2fa: "wacht op 2FA-code",
-  failed: "inloggen mislukt",
-};
+const STATE_LABEL = Object.fromEntries(["starting", "not_configured", "logging_in", "ready", "needs_2fa", "failed"]
+  .map((state, index) => [state, t.states[index]]));
 const picnic = { state: "starting", detail: "", since: Date.now() };
 let loginInFlight = null;
 let last2faSentAt = 0;
@@ -242,7 +238,7 @@ async function confirmLoggedIn() {
     await getPicnicClient().cart.getCart();
   } catch (err) {
     if (looksLike2fa(err) || (err?.status ?? err?.statusCode) === 401 || (err?.status ?? err?.statusCode) === 403) {
-      setState("needs_2fa", "Picnic vraagt om een tweede factor. Vraag hieronder een code aan en vul die in.");
+      setState("needs_2fa", t.needs2fa);
     } else {
       setState("failed", errorText(err));
     }
@@ -259,7 +255,7 @@ function login({ fresh = false } = {}) {
   if (loginInFlight) return loginInFlight;
   loginInFlight = (async () => {
     if (!PICNIC_EMAIL || !PICNIC_PASSWORD) {
-      setState("not_configured", "Vul picnic_email en picnic_password in op het tabblad Configuratie en herstart de add-on.");
+      setState("not_configured", t.notConfigured);
       return;
     }
     setState("logging_in");
@@ -323,6 +319,7 @@ const oauth = createOAuth({
   publicOrigin: PUBLIC_ORIGIN,
   getAuthToken: () => AUTH_TOKEN,
   log,
+  messages: t,
 });
 
 function requireBearerAuth(req, res, next) {
@@ -468,32 +465,31 @@ function renderDashboard(banner = "") {
   const mcpUrl = MCP_URL || `http://<home-assistant-host>:${PORT}/mcp`;
 
   const twoFa = picnic.state === "needs_2fa" || picnic.state === "failed" ? `
-  <h2>Tweestapsverificatie</h2>
-  <p>Heeft je Picnic-account 2FA aan, vraag dan een code aan en vul die hieronder in.
-  De sessie wordt daarna bewaard; je hoeft dit alleen opnieuw te doen als Picnic de sessie intrekt.</p>
-  <form method="post" action="send-2fa"><div class="actions"><button type="submit">Stuur code per sms</button></div></form>
+  <h2>${escapeHtml(t.twofaTitle)}</h2>
+  <p>${escapeHtml(t.twofaHelp)}</p>
+  <form method="post" action="send-2fa"><div class="actions"><button type="submit">${escapeHtml(t.sendCode)}</button></div></form>
   <form method="post" action="verify-2fa" class="field">
-    <input class="mono" name="code" inputmode="numeric" autocomplete="one-time-code" placeholder="code uit de sms" required>
-    <button type="submit">Verifiëren</button>
+    <input class="mono" name="code" inputmode="numeric" autocomplete="one-time-code" placeholder="${escapeHtml(t.codePlaceholder)}" required>
+    <button type="submit">${escapeHtml(t.verify)}</button>
   </form>` : "";
 
-  const groupRows = Object.entries(TOOL_GROUPS).map(([group, def]) => {
+  const groupRows = Object.entries(TOOL_GROUPS).map(([group, def], index) => {
     const on = groupEnabled(group);
-    const option = def.option ? `<code>${escapeHtml(def.option.toLowerCase())}</code>` : "altijd aan";
-    return `<tr><td>${escapeHtml(def.label)}</td><td>${option}</td><td>${on ? '<span class="ok">● aan</span>' : '<span class="off">○ uit</span>'}</td></tr>`;
+    const option = def.option ? `<code>${escapeHtml(def.option.toLowerCase())}</code>` : escapeHtml(t.alwaysOn);
+    return `<tr><td>${escapeHtml(t.groups[index])}</td><td>${option}</td><td>${on ? `<span class="ok">● ${escapeHtml(t.on)}</span>` : `<span class="off">○ ${escapeHtml(t.off)}</span>`}</td></tr>`;
   }).join("\n");
 
   const withheld = withheldTools.length
     ? `<ul>${withheldTools.map((t) => `<li><code>${escapeHtml(t.tool)}</code> — ${escapeHtml(t.reason)}</li>`).join("")}</ul>`
-    : "<p>Geen.</p>";
+    : `<p>${escapeHtml(t.none)}</p>`;
 
   const clients = oauth.listClients();
   const clientRows = clients.length
-    ? clients.map((c) => `<tr><td>${escapeHtml(c.client_name || "(naamloos)")}</td><td>${escapeHtml(c.redirect_host)}</td><td>${escapeHtml(new Date(c.created_at).toLocaleString("nl-NL"))}</td></tr>`).join("\n")
-    : '<tr><td colspan="3">Nog geen clients via OAuth gekoppeld.</td></tr>';
+    ? clients.map((c) => `<tr><td>${escapeHtml(c.client_name || t.unnamed)}</td><td>${escapeHtml(c.redirect_host)}</td><td>${escapeHtml(new Date(c.created_at).toLocaleString(t.locale))}</td></tr>`).join("\n")
+    : `<tr><td colspan="3">${escapeHtml(t.noClients)}</td></tr>`;
 
   return `<!doctype html>
-<html lang="nl">
+<html lang="${t.lang}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -520,48 +516,44 @@ function renderDashboard(banner = "") {
   <h1>Picnic MCP</h1>
   ${banner}
 
-  <h2>Picnic-account</h2>
+  <h2>${escapeHtml(t.account)}</h2>
   <table>
     <tr><td>Account</td><td>${escapeHtml(maskEmail(PICNIC_EMAIL) || "—")} (${escapeHtml(COUNTRY)})</td></tr>
-    <tr><td>Status</td><td><span class="${stateClass}">● ${escapeHtml(STATE_LABEL[picnic.state])}</span>
+    <tr><td>${escapeHtml(t.status)}</td><td><span class="${stateClass}">● ${escapeHtml(STATE_LABEL[picnic.state])}</span>
       ${picnic.detail ? `<br><span class="small">${escapeHtml(picnic.detail)}</span>` : ""}</td></tr>
   </table>
   ${twoFa}
-  <form method="post" action="relogin" onsubmit="return confirm('Sessie weggooien en opnieuw inloggen? Bij 2FA krijg je een nieuwe code nodig.')">
-    <div class="actions"><button type="submit">Opnieuw inloggen</button></div>
+  <form method="post" action="relogin" onsubmit="return confirm(${escapeHtml(JSON.stringify(t.reloginConfirm))})">
+    <div class="actions"><button type="submit">${escapeHtml(t.relogin)}</button></div>
   </form>
-  <p class="small">E-mail, wachtwoord en land stel je in op het tabblad <strong>Configuratie</strong>
-  (alleen voor beheerders); daarna de add-on herstarten.</p>
+  <p class="small">${escapeHtml(t.configHelp)}</p>
 
-  <h2>Verbinding</h2>
+  <h2>${escapeHtml(t.connection)}</h2>
   <div class="field">
     <input class="mono" readonly value="${escapeHtml(mcpUrl)}" onclick="this.select()">
-    <button onclick="navigator.clipboard.writeText(this.previousElementSibling.value)">Kopieer URL</button>
+    <button onclick="navigator.clipboard.writeText(this.previousElementSibling.value)">${escapeHtml(t.copyUrl)}</button>
   </div>
-  <p class="small">Het bearer-token staat op het tabblad <strong>Configuratie</strong> (<code>mcp_auth_token</code>).
-  Clients met een header-veld sturen het als <code>Authorization: Bearer &lt;token&gt;</code>; Claude op web en
-  mobiel vraagt er eenmalig om op een inlogpagina (OAuth).</p>
+  <p class="small">${escapeHtml(t.tokenHelp)}</p>
 
-  <h2>Gekoppelde OAuth-clients</h2>
+  <h2>${escapeHtml(t.clients)}</h2>
   <table>
-    <tr><th>Client</th><th>Terug naar</th><th>Gekoppeld op</th></tr>
+    <tr><th>${escapeHtml(t.client)}</th><th>${escapeHtml(t.returnTo)}</th><th>${escapeHtml(t.connectedOn)}</th></tr>
     ${clientRows}
   </table>
-  <form method="post" action="revoke-oauth" onsubmit="return confirm('Alle via OAuth uitgegeven tokens intrekken? Gekoppelde apps moeten dan opnieuw autoriseren.')">
-    <div class="actions"><button type="submit">Trek alle OAuth-tokens in</button></div>
+  <form method="post" action="revoke-oauth" onsubmit="return confirm(${escapeHtml(JSON.stringify(t.revokeConfirm))})">
+    <div class="actions"><button type="submit">${escapeHtml(t.revoke)}</button></div>
   </form>
 
-  <h2>Wat de assistent mag</h2>
+  <h2>${escapeHtml(t.permissions)}</h2>
   <table>
-    <tr><th>Groep</th><th>Optie</th><th></th></tr>
+    <tr><th>${escapeHtml(t.group)}</th><th>${escapeHtml(t.option)}</th><th></th></tr>
     ${groupRows}
   </table>
-  <p class="small">${publishedTools.length} tools gepubliceerd, ${withheldTools.length} achtergehouden. Aanpassen via
-  Configuratie en een herstart.</p>
+  <p class="small">${escapeHtml(t.toolsSummary(publishedTools.length, withheldTools.length))}</p>
   ${withheld}
 
-  <h2>Meer info</h2>
-  <p>Documentatie staat op het tabblad <strong>Documentatie</strong> van deze add-on ·
+  <h2>${escapeHtml(t.moreInfo)}</h2>
+  <p>${escapeHtml(t.docsHelp)} ·
   <a href="https://github.com/ivo-toby/mcp-picnic" target="_blank" rel="noopener">upstream mcp-picnic</a></p>
 </body>
 </html>`;
@@ -585,12 +577,7 @@ webApp.use((req, res, next) => {
 });
 webApp.use(express.urlencoded({ extended: false, limit: "16kb" }));
 
-const BANNERS = {
-  sent: "Code aangevraagd — check je sms.",
-  verified: "Code geaccepteerd.",
-  relogin: "Opnieuw ingelogd — zie de status hieronder.",
-  revoked: "Alle OAuth-tokens zijn ingetrokken.",
-};
+const BANNERS = t.banners;
 
 webApp.get("/", (req, res) => {
   let banner = "";
@@ -608,7 +595,7 @@ const backWithError = (res, err) => back(res, `error=${encodeURIComponent(errorT
 
 webApp.post("/send-2fa", async (_req, res) => {
   if (Date.now() - last2faSentAt < 60_000) {
-    return backWithError(res, new Error("Er is net al een code verstuurd; wacht een minuut."));
+    return backWithError(res, new Error(t.wait));
   }
   try {
     if (picnic.state !== "needs_2fa") await login({ fresh: true });
@@ -629,11 +616,11 @@ webApp.post("/send-2fa", async (_req, res) => {
 
 webApp.post("/verify-2fa", async (req, res) => {
   const code = String(req.body?.code ?? "").replace(/\s+/g, "");
-  if (!/^\d{4,8}$/.test(code)) return backWithError(res, new Error("Dat lijkt geen geldige code."));
+  if (!/^\d{4,8}$/.test(code)) return backWithError(res, new Error(t.invalidCode));
   try {
     await verifyPicnic2FACode(code);
     if (await confirmLoggedIn()) return back(res, "verified");
-    backWithError(res, new Error(picnic.detail || "Code geaccepteerd, maar Picnic geeft nog geen toegang."));
+    backWithError(res, new Error(picnic.detail || t.noAccess));
   } catch (err) {
     log("warning", "Picnic 2FA verification failed", { err: errorText(err) });
     backWithError(res, err);
