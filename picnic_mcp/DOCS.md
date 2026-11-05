@@ -46,6 +46,11 @@ machine.
 | `expose_2fa_tools` | Default **off**. Let the assistant request and enter 2FA codes itself, instead of you doing it in the web UI. |
 | `log_level` | `debug` \| `info` \| `warning` \| `error`. |
 
+The dashboard and OAuth approval page use the language of `country_code`:
+German (DE), Dutch (NL), or French (FR). English is the fallback for an
+unsupported country. Changing the country also changes the Picnic account
+context and discards its stored session; it is not a language-only setting.
+
 Browsing — product search, promotions, product details and images, recipes,
 shopping lists, the cart, delivery slots, deliveries and their status — is
 always available. Tool changes need a restart.

@@ -15,6 +15,7 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import fs from "node:fs";
 import express from "express";
+import { messagesForCountry } from "./i18n.mjs";
 
 const ACCESS_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 const REFRESH_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000; // 90 days, sliding (rotated on use)
@@ -74,7 +75,7 @@ function redirectHost(uri) {
  * @param {() => string} opts.getAuthToken
  * @param {(level: string, msg: string, extra?: object) => void} opts.log
  */
-export function createOAuth({ storePath, publicOrigin, getAuthToken, log }) {
+export function createOAuth({ storePath, publicOrigin, getAuthToken, log, messages = messagesForCountry() }) {
   const empty = () => ({ version: STORE_VERSION, clients: {}, accessTokens: {}, refreshTokens: {} });
   let store;
   let migrated = false;
@@ -188,11 +189,11 @@ export function createOAuth({ storePath, publicOrigin, getAuthToken, log }) {
       .map(([k, v]) => `<input type="hidden" name="${escapeHtml(k)}" value="${escapeHtml(v ?? "")}">`)
       .join("\n    ");
     return `<!doctype html>
-<html lang="en">
+<html lang="${messages.lang}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Authorize — Picnic MCP</title>
+<title>${escapeHtml(messages.oauthTitle)} — Picnic MCP</title>
 <style>
   :root { color-scheme: light dark; }
   body { font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; max-width: 440px; margin: 3rem auto; padding: 0 1rem; }
@@ -205,21 +206,18 @@ export function createOAuth({ storePath, publicOrigin, getAuthToken, log }) {
 </style>
 </head>
 <body>
-  <h1>Authorize ${escapeHtml(clientName || "MCP client")}</h1>
-  <p>This client wants to use your <strong>Picnic account</strong> through your
-  Home Assistant: search products, read your cart and deliveries and — depending
-  on the add-on's settings — change them.</p>
-  <p class="small">After approval you are sent back to <code>${escapeHtml(redirectHost(redirectUri))}</code>.
-  Only continue if that is the app you are connecting.</p>
+  <h1>${escapeHtml(messages.authorize)} ${escapeHtml(clientName || "MCP client")}</h1>
+  <p>${escapeHtml(messages.oauthIntro)}</p>
+  <p class="small">${escapeHtml(messages.oauthRedirect)} <code>${escapeHtml(redirectHost(redirectUri))}</code>.
+  ${escapeHtml(messages.oauthCheck)}</p>
   ${error ? `<p class="error">${escapeHtml(error)}</p>` : ""}
   <form method="post" action="/authorize">
     ${hidden}
-    <label for="token">Bearer token</label>
+    <label for="token">${escapeHtml(messages.oauthToken)}</label>
     <input type="password" id="token" name="token" autocomplete="off" autofocus required>
-    <button type="submit">Authorize</button>
+    <button type="submit">${escapeHtml(messages.authorize)}</button>
   </form>
-  <p class="small">The token is the <code>mcp_auth_token</code> in this add-on's
-  Configuration tab in Home Assistant.</p>
+  <p class="small">${escapeHtml(messages.oauthTokenHelp)}</p>
 </body>
 </html>`;
   }
@@ -351,14 +349,14 @@ export function createOAuth({ storePath, publicOrigin, getAuthToken, log }) {
       hiddenFields: { client_id, redirect_uri, state: state ?? "", code_challenge },
     }));
 
-    if (tooManyAttempts(key)) return again(429, "Too many attempts. Try again in 15 minutes.");
+    if (tooManyAttempts(key)) return again(429, messages.oauthLimit);
 
     const expected = getAuthToken();
     const ok = typeof token === "string" && token.length > 0 && expected.length > 0 && timingSafeEqualStr(token.trim(), expected);
     if (!ok) {
       recordAttempt(key);
       log("warning", "Rejected OAuth consent: wrong bearer token", { clientName: client.client_name });
-      return again(401, "That token is not correct.");
+      return again(401, messages.oauthWrong);
     }
 
     const code = randomBytes(32).toString("hex");
